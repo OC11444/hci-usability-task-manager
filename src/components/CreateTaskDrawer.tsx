@@ -12,6 +12,7 @@ import { CalendarIcon, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { mockGroups, type Priority, type TaskStatus } from "@/stores/mockData";
+import type { Task } from "@/types/academic";
 import { useAcademic } from "@/stores/useAppStore";
 
 // 1. FIXED: Updated payload keys to match Django's snake_case expectations
@@ -30,10 +31,12 @@ interface CreateTaskDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreate: (task: CreateTaskPayload) => Promise<unknown>;
+  initialTask?: Task | null;
+  onUpdate?: (taskId: string, task: Partial<Task>) => Promise<unknown>;
   isCreating: boolean;
 }
 
-export function CreateTaskDrawer({ open, onOpenChange, onCreate, isCreating }: CreateTaskDrawerProps) {
+export function CreateTaskDrawer({ open, onOpenChange, onCreate, initialTask, onUpdate, isCreating }: CreateTaskDrawerProps) {
   const {
     schools,
     departments,
@@ -59,13 +62,43 @@ export function CreateTaskDrawer({ open, onOpenChange, onCreate, isCreating }: C
   const [priority, setPriority] = useState<Priority>("medium");
   const [deadline, setDeadline] = useState<Date | undefined>();
   const [allowLateSubmission, setAllowLateSubmission] = useState(false);
+  const [assignmentChanged, setAssignmentChanged] = useState(false);
 
   const [selectedSchool, setSelectedSchool] = useState("");
   const [selectedDepartment, setSelectedDepartment] = useState("");
   const [selectedCourse, setSelectedCourse] = useState("");
   const [selectedUnit, setSelectedUnit] = useState("");
 
+  useEffect(() => {
+    if (!open) return;
+    if (!initialTask) {
+      setTitle("");
+      setDescription("");
+      setSelectedGroups([]);
+      setPriority("medium");
+      setDeadline(undefined);
+      setSelectedUnit("");
+      setAssignmentChanged(false);
+      return;
+    }
+
+    const rawDeadline = initialTask.dueDate || initialTask.due_date;
+    const assignedTo = Array.isArray(initialTask.assignedTo)
+      ? initialTask.assignedTo
+      : initialTask.assignedTo ? [initialTask.assignedTo] : [];
+    setTitle(initialTask.title);
+    setDescription(initialTask.description);
+    setPriority(initialTask.priority);
+    setDeadline(rawDeadline ? new Date(rawDeadline) : undefined);
+    setSelectedUnit(initialTask.unitId);
+    setAssignmentChanged(false);
+    setSelectedGroups(mockGroups
+      .filter((group) => group.members.some((member) => assignedTo.includes(member)))
+      .map((group) => group.id));
+  }, [open, initialTask]);
+
   const toggleGroup = (gId: string) => {
+    setAssignmentChanged(true);
     setSelectedGroups((prev) =>
       prev.includes(gId) ? prev.filter((g) => g !== gId) : [...prev, gId]
     );
@@ -79,17 +112,32 @@ export function CreateTaskDrawer({ open, onOpenChange, onCreate, isCreating }: C
     if (!title || !selectedUnit || !deadline) return;
     
     try {
-      // 2. FIXED: Payload now sends the correct keys to the backend
-      await onCreate({
-        title,
-        description,
-        unit: selectedUnit,        
-        priority,
-        status: "todo",
-        due_date: deadline.toISOString(), 
-        allow_late_submissions: allowLateSubmission,         
-        assignedTo: [...new Set(assignedMembers)],
-      });
+      if (initialTask && onUpdate) {
+        await onUpdate(initialTask.id, {
+          title,
+          description,
+          unitId: selectedUnit,
+          priority,
+          dueDate: deadline.toISOString(),
+          due_date: deadline.toISOString(),
+          assignedTo: assignmentChanged
+            ? [...new Set(assignedMembers)]
+            : Array.isArray(initialTask.assignedTo)
+              ? initialTask.assignedTo
+              : initialTask.assignedTo ? [initialTask.assignedTo] : [],
+        });
+      } else {
+        await onCreate({
+          title,
+          description,
+          unit: selectedUnit,
+          priority,
+          status: "todo",
+          due_date: deadline.toISOString(),
+          allow_late_submissions: allowLateSubmission,
+          assignedTo: [...new Set(assignedMembers)],
+        });
+      }
       
       setTitle("");
       setDescription("");
@@ -117,12 +165,12 @@ export function CreateTaskDrawer({ open, onOpenChange, onCreate, isCreating }: C
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
         <SheetHeader>
-          <SheetTitle className="text-xl">Create Task</SheetTitle>
+          <SheetTitle className="text-xl">{initialTask ? "Edit Task" : "Create Task"}</SheetTitle>
           <SheetDescription>Assign work to your students and teams.</SheetDescription>
         </SheetHeader>
 
         <div className="mt-6 space-y-5">
-          <div className="space-y-4 border border-border/50 p-4 rounded-2xl bg-muted/20">
+          {!initialTask && <div className="space-y-4 border border-border/50 p-4 rounded-2xl bg-muted/20">
             {/* School */}
             <div className="space-y-2">
               <Label>School</Label>
@@ -140,7 +188,7 @@ export function CreateTaskDrawer({ open, onOpenChange, onCreate, isCreating }: C
                   <SelectValue placeholder="Select a school..." />
                 </SelectTrigger>
                 <SelectContent className="rounded-2xl">
-                  {schools.map((school: any) => (
+                  {schools.map((school) => (
                     <SelectItem key={school.id} value={String(school.id)}>
                       {school.name}
                     </SelectItem>
@@ -166,7 +214,7 @@ export function CreateTaskDrawer({ open, onOpenChange, onCreate, isCreating }: C
                   <SelectValue placeholder="Select a department..." />
                 </SelectTrigger>
                 <SelectContent className="rounded-2xl">
-                  {departments.map((dept: any) => (
+                  {departments.map((dept) => (
                     <SelectItem key={dept.id} value={String(dept.id)}>
                       {dept.name}
                     </SelectItem>
@@ -191,10 +239,9 @@ export function CreateTaskDrawer({ open, onOpenChange, onCreate, isCreating }: C
                   <SelectValue placeholder="Select a course..." />
                 </SelectTrigger>
                 <SelectContent className="rounded-2xl">
-                  {courses.map((course: any) => (
-                    // 3. FIXED: Mapped to course_code and name
+                  {courses.map((course) => (
                     <SelectItem key={course.id} value={String(course.id)}>
-                      {course.course_code} — {course.name}
+                      {course.courseCode} — {course.title}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -213,16 +260,16 @@ export function CreateTaskDrawer({ open, onOpenChange, onCreate, isCreating }: C
                   <SelectValue placeholder="Select a unit..." />
                 </SelectTrigger>
                 <SelectContent className="rounded-2xl">
-                  {units.map((u: any) => (
+                  {units.map((u) => (
                     // 4. FIXED: Removed sort() and mapped to name
                     <SelectItem key={u.id} value={String(u.id)}>
-                      {u.name}
+                      {u.title}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-          </div>
+          </div>}
 
           <div className="space-y-2">
             <Label htmlFor="task-title">Title</Label>
@@ -352,7 +399,7 @@ export function CreateTaskDrawer({ open, onOpenChange, onCreate, isCreating }: C
                   Creating...
                 </>
               ) : (
-                "Create Task"
+                initialTask ? "Save Changes" : "Create Task"
               )}
             </SpringButton>
           </div>

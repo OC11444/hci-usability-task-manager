@@ -1,10 +1,13 @@
 import axios from "axios";
+import { USE_MOCK_DATA } from "./mockConfig";
+import { mockAdapter } from "./mockAdapter";
 
 const api = axios.create({
-  baseURL: "https://academic-api-bfhv.onrender.com/api",  // Ensure this is http://localhost:8000/api
+  baseURL: import.meta.env.VITE_API_URL || "https://academic-api-bfhv.onrender.com/api", // Ensure this is http://localhost:8000/api
   headers: {
     "Content-Type": "application/json",
   },
+  adapter: USE_MOCK_DATA ? mockAdapter : undefined,
 });
 
 // The Interceptor: Attaches the JWT to every outgoing request

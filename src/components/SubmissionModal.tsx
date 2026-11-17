@@ -6,9 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { LinkValidator } from "@/components/LinkValidator";
 import { SpringButton } from "@/components/SpringButton";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
-//import { useTasks } from "@/stores/useAppStore";
 import { isAfter } from "date-fns";
-import api from "@/lib/api";
 
 import type { Task } from "@/types/academic";
 
@@ -17,9 +15,10 @@ interface SubmissionModalProps {
   onOpenChange: (open: boolean) => void;
   initialTaskId?: string;
   tasks: Task[]; // 👈 NEW: Expect tasks as a prop
+  onSubmit: (input: { taskId: string; submissionLink: string; notes?: string }) => Promise<unknown>;
 }
 
-export function SubmissionModal({ open, onOpenChange, initialTaskId, tasks }: SubmissionModalProps) {
+export function SubmissionModal({ open, onOpenChange, initialTaskId, tasks, onSubmit }: SubmissionModalProps) {
   
   // 2. Local State
   const [link, setLink] = useState("");
@@ -34,7 +33,7 @@ export function SubmissionModal({ open, onOpenChange, initialTaskId, tasks }: Su
 
   // 4. Calculate if the currently selected task is late (Defensive against API vs Mock data)
   const selectedTask = tasks.find(t => t.id === selectedTaskId);
-  const rawDate = selectedTask ? ((selectedTask as any).due_date || (selectedTask as any).dueDate || (selectedTask as any).deadline) : null;
+  const rawDate = selectedTask?.due_date || selectedTask?.dueDate;
   const isLate = rawDate ? isAfter(new Date(), new Date(rawDate)) : false;
   
   const isValidLink = /drive\.google\.com|docs\.google\.com|dropbox\.com|onedrive\.live\.com|1drv\.ms|sharepoint\.com/.test(link);
@@ -44,10 +43,10 @@ export function SubmissionModal({ open, onOpenChange, initialTaskId, tasks }: Su
     
     setIsSubmitting(true);
     try {
-      // Send the real request to the backend using the exact Django router path
-      await api.post("tasks/submissions/", {
-        task: parseInt(selectedTaskId),
-        submission_link: link,
+      await onSubmit({
+        taskId: selectedTaskId,
+        submissionLink: link,
+        notes,
       });
 
       onOpenChange(false);

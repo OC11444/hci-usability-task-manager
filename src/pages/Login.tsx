@@ -19,57 +19,14 @@ export default function Login() {
   const [isNewUser, setIsNewUser] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
 
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-
     try {
-      const result = await authService.login({
-        email,
-        password,
-        role,
-      });
-
-      const { status, data } = result;
-
-      // 1. Path for Returning Users with valid credentials
-      if (data?.access) {
-        navigate(data.role === "staff" ? "/staff" : "/student");
-        return;
-      }
-
-      // 2. Path for successful verification initiation (201 Created)
-      if (status === 201) {
-        setShowSuccess(true);
-        return;
-      }
-
-      setShowSuccess(true);
-    } catch (error: any) {
+      const response = await authService.login({ email, password, role });
+      navigate(response.data.role === "staff" ? "/staff" : "/student");
+    } catch (error) {
       console.error("Login failed:", error);
-
-      // 🚀 THE FIX: Robust New User Detection
-      // We convert the backend error to a lowercase string so we can search it for clues
-      const errorData = error.response?.data;
-      const errorString = JSON.stringify(errorData || "").toLowerCase();
-
-      // If Django specifically asks for confirmation or flags a first-time login,
-      // we instantly route them to the SetPassword component.
-      if (
-        errorString.includes("first-time login") || 
-        errorString.includes("confirm_password") ||
-        errorString.includes("must confirm")
-      ) {
-        console.log("New user detected via login form! Redirecting to setup...");
-        setIsNewUser(true);
-        return;
-      }
-
-      // Show actual error for other issues (e.g., wrong password, missing registry email)
-      const displayError = errorData?.error || errorData?.detail || "Login failed. Please check your credentials.";
-      alert(displayError);
-      
     } finally {
       setIsLoading(false);
     }

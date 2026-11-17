@@ -24,7 +24,7 @@ export default function StudentDashboard() {
   const [commentOpen, setCommentOpen] = useState(false);
 
   // Grab the fetch functions and real data from the store
-  const { tasks, moveTask, addComment, fetchTasks } = useTasks();
+  const { tasks, moveTask, addComment, createSubmission, fetchTasks } = useTasks();
   const selectedTask = tasks.find(t => String(t.id) === String(selectedTaskId)) || null;
   const { notifications, unreadCount, markAsRead, markAllRead, fetchNotifications } = useNotifications();
   const { members } = useTeamPresence();
@@ -144,7 +144,7 @@ export default function StudentDashboard() {
         </div>
       </div>
       
-      <SubmissionModal open={modalOpen} onOpenChange={setModalOpen} tasks={tasks} />
+      <SubmissionModal open={modalOpen} onOpenChange={setModalOpen} tasks={tasks} onSubmit={createSubmission} />
       
       {/* ⚠️ NOTE: This will show an error until we fix TaskCommentPanel next! */}
       <TaskCommentPanel 

@@ -64,7 +64,12 @@ export interface Task {
   status: TaskStatus;
   priority: Priority;
   dueDate: string;     // Backend usually sends dates as strings
-  assignedTo?: string; // User ID
+  /** Some responses use snake_case; the UI accepts either. */
+  due_date?: string;
+  /** Short label shown on cards, e.g. "CS 601". */
+  unit_code?: string;
+  assignedTo?: string | string[];
+  allow_late_submissions?: boolean;
   comments?: Comment[];
 }
 
@@ -77,6 +82,7 @@ export interface TaskSubmission {
   submission_link: string;
   grade?: number | null;
   feedback?: string | null;
+  notes?: string;
   submitted_at?: string;
 }
 

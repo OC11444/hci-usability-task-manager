@@ -20,10 +20,11 @@ import { useAuthUser } from "@/hooks/useAuthUser";
 export default function StaffDashboard() {
   const user = useAuthUser();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [commentOpen, setCommentOpen] = useState(false);
 
-  const { tasks, submissions, createTask, moveSubmission, addComment, isCreating, fetchTasks, fetchSubmissions } = useTasks();
+  const { tasks, submissions, createTask, updateTask, deleteTask, moveTask, moveSubmission, addComment, isCreating, fetchTasks, fetchSubmissions } = useTasks();
   // Removed addNotification to prevent the UI crash
   const { notifications, unreadCount, markAsRead, markAllRead, fetchNotifications } = useNotifications();
   const { members } = useTeamPresence();
@@ -40,18 +41,17 @@ export default function StaffDashboard() {
 
   const handleCreateTask = async (taskData: CreateTaskPayload) => {
     try {
-      // 1. Django strictly expects Title Case ("High", "Medium", "Low")
-      const formattedPriority = taskData.priority.charAt(0).toUpperCase() + taskData.priority.slice(1);
-
-      // 2. Pass EXACTLY the keys Django's TaskSerializer expects
       await createTask({
         title: taskData.title,
         description: taskData.description,
-        unit: taskData.unit, 
-        priority: formattedPriority, 
-        due_date: taskData.due_date, 
+        unitId: taskData.unit,
+        priority: taskData.priority,
+        status: taskData.status,
+        dueDate: taskData.due_date,
+        due_date: taskData.due_date,
+        assignedTo: taskData.assignedTo,
         allow_late_submissions: taskData.allow_late_submissions,
-      } as any); // Cast as 'any' temporarily so your Zustand store types don't throw a TS error
+      });
       
       // We removed addNotification here. The Toast is all we need!
       toast.success("Task created", { description: `"${taskData.title}" has been assigned.` });
@@ -60,6 +60,22 @@ export default function StaffDashboard() {
       toast.error("Failed to create task", { description: "An error occurred." });
       console.error("Local Error:", error);
     }
+  };
+  const handleUpdateTask = async (taskId: string, taskData: Partial<Task>) => {
+    await updateTask(taskId, taskData);
+    setDrawerOpen(false);
+    setEditingTask(null);
+    toast.success("Task updated");
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    await deleteTask(taskId);
+    toast.success("Task deleted");
+  };
+
+  const handleEditTask = (task: Task) => {
+    setEditingTask(task);
+    setDrawerOpen(true);
   };
 
   const handleSelectTask = (kanbanTask: Task) => {
@@ -80,7 +96,7 @@ export default function StaffDashboard() {
   // Map submissions into visual "Task Cards" for the Staff Kanban
   const staffKanbanTasks: Task[] = (submissions || []).map(sub => {
     const parentTask = tasks.find(t => String(t.id) === String(sub.task));
-    const studentName = (sub as any).student_name || `Student ID: ${sub.student}`;
+    const studentName = sub.student_name || `Student ID: ${sub.student}`;
     return {
       id: String(sub.id), // Critical: We use the SUBMISSION ID so it moves the submission, not the task!
       unitId: parentTask?.unitId || "",
@@ -105,7 +121,7 @@ export default function StaffDashboard() {
     return {
       id: String(sub.id),
       // We will use the ID until we update the backend serializer to send the real name later
-      studentName: (sub as any).student_name || `Student ID: ${sub.student}`, 
+      studentName: sub.student_name || `Student ID: ${sub.student}`,
       taskTitle: parentTask?.title || "Loading Task...",
       submittedAt: sub.submitted_at || new Date().toISOString(),
       status: sub.status === "done" ? ("graded" as const) : ("pending" as const),
@@ -137,7 +153,7 @@ export default function StaffDashboard() {
                 onMarkAsRead={markAsRead}
                 onMarkAllRead={markAllRead}
               />
-              <SpringButton size="sm" onClick={() => setDrawerOpen(true)} className="rounded-xl shadow-lg shadow-primary/20">
+              <SpringButton size="sm" onClick={() => { setEditingTask(null); setDrawerOpen(true); }} className="rounded-xl shadow-lg shadow-primary/20">
                 <Plus className="mr-1 h-4 w-4" />
                 Create Task
               </SpringButton>
@@ -151,12 +167,28 @@ export default function StaffDashboard() {
 
             <section className="space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-bold tracking-tight">Active Task Board</h3>
+                <h3 className="text-lg font-bold tracking-tight">Submission Review Board</h3>
                 <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest bg-muted px-2 py-1 rounded-md">
-                  {tasks.length} total tasks
+                  {submissions.length} submissions
                 </span>
               </div>
               <KanbanBoard tasks={staffKanbanTasks} onMoveTask={moveSubmission} onSelectTask={handleSelectTask} />
+            </section>
+
+            <section className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-bold tracking-tight">Task Management</h3>
+                <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest bg-muted px-2 py-1 rounded-md">
+                  {tasks.length} tasks
+                </span>
+              </div>
+              <KanbanBoard
+                tasks={tasks}
+                onMoveTask={moveTask}
+                onSelectTask={handleSelectTask}
+                onEditTask={handleEditTask}
+                onDeleteTask={handleDeleteTask}
+              />
             </section>
 
             <div className="grid grid-cols-1 gap-8 xl:grid-cols-3">
@@ -175,6 +207,8 @@ export default function StaffDashboard() {
         open={drawerOpen} 
         onOpenChange={setDrawerOpen} 
         onCreate={handleCreateTask} 
+        initialTask={editingTask}
+        onUpdate={handleUpdateTask}
         isCreating={isCreating} 
       />
       
